@@ -1,28 +1,31 @@
-﻿# Mini Product Service (Bun + TypeScript + Docker)
+﻿# Mini Product Service V2 (Docker Compose + Bun + TypeScript + MySQL)
 
-Service HTTP sederhana menggunakan Bun dan TypeScript yang melayani daftar produk pada endpoint /products, lalu dikemas menggunakan Docker.
+Layanan API sederhana berbasis **Bun** dan **TypeScript** yang terhubung ke **MySQL 8.4** menggunakan **Docker Compose** dengan penyimpanan data persisten melalui volume `mysql_data`.
 
-## Struktur Project
-- index.ts - kode server Bun + TypeScript (Bun.serve pada port 3000)
-- package.json & bun.lock - konfigurasi project dan lockfile dependensi
-- Dockerfile - instruksi build image berbasis oven/bun:1
-- .dockerignore - daftar file/folder yang dikecualikan saat build Docker image
+## Arsitektur Layanan
+- **app** (`src/index.ts`, port `3000`): Server HTTP Bun yang melayani endpoint `GET /products` dengan mengambil data dari tabel `products` melalui `mysql2/promise` (`DB_HOST=db`).
+- **db** (`mysql:8.4`, port `3306`): Database MySQL yang diinisialisasi otomatis oleh `sql/init.sql` dan menyimpan data pada volume `mysql_data:/var/lib/mysql`, dilengkapi `healthcheck` agar `app` menunggu database siap (`service_healthy`).
 
-## Cara Menjalankan Secara Lokal (Bun)
-Perintah: bun run index.ts
-Buka http://localhost:3000/products di browser.
+## Konfigurasi Environment
+Salin `.env.example` menjadi `.env` (file `.env` diabaikan oleh `.gitignore` agar kredensial tidak terunggah ke GitHub):
+- `DB_HOST=db`
+- `DB_PORT=3306`
+- `DB_NAME=toko`
+- `DB_USER=toko_app`
+- `DB_PASSWORD=...`
+- `DB_ROOT_PASSWORD=...`
+- `APP_PORT=3000`
 
-## Cara Menjalankan dengan Docker
-Perintah build: docker build -t mini-product-service .
-Perintah run: docker run -d --name mini-product -p 3000:3000 mini-product-service
-Buka http://localhost:3000/products di browser.
+## Menjalankan & Menguji Layanan
+1. Validasi konfigurasi Compose: `docker compose config`
+2. Build dan jalankan layanan di latar belakang: `docker compose up -d --build`
+3. Cek status container: `docker compose ps`, lalu buka `http://localhost:3000/products` di browser.
 
-## Pemeriksaan Status, Port & Log
-- docker ps
-- docker ps -a
-- docker logs mini-product
+## Uji Persistensi Volume
+1. Tambah data baru pada tabel `products` di layanan `db`.
+2. Hentikan dengan `docker compose down` lalu nyalakan lagi dengan `docker compose up -d` (tanpa `-v`).
+3. Cek kembali `http://localhost:3000/products` untuk memastikan data tetap ada di volume `mysql_data`.
 
-## Ringkasan Bug Hunt
-1. Bug Hunt #1 (Container langsung berhenti): Diperiksa melalui docker ps -a dan docker logs untuk membaca pesan error sebelum mengubah kode.
-2. Bug Hunt #2 (Beda port mapping): Menjalankan container dengan -p 8080:3000 sehingga diakses melalui http://localhost:8080/products.
-3. Bug Hunt #3 (Kode berubah, hasil masih lama): Image lama tidak otomatis berubah saat index.ts diedit; perlu docker stop, docker rm, docker build -t mini-product-service ., dan docker run ulang.
+## Catatan Debugging
+- **RSA Public Key Retrieval pada MySQL 8.4:** Diatasi menggunakan `mysql2/promise` dengan `allowPublicKeyRetrieval: true` serta inisialisasi volume bersih saat dibutuhkan.
+- **Tipe `ssl` pada `PoolOptions` (`ts(2769)`):** Properti `ssl` tidak diberi nilai boolean `false` agar sesuai tipe `string | SslOptions | undefined`.
